@@ -242,33 +242,117 @@ def load_vector_store():
 # --------------------------------------------------
 # Semantic search
 # --------------------------------------------------
+# --------------------------------------------------
+# Unsupported topic detection
+# --------------------------------------------------
+
+UNSUPPORTED_TRAVEL_TYPES = {
+    "hotel": [
+        "hotel",
+        "hotels",
+        "hotel reimbursement",
+        "hotel expense"
+    ],
+
+    "flight": [
+        "flight",
+        "flights",
+        "flight ticket",
+        "air ticket",
+        "airfare",
+        "flight reimbursement"
+    ],
+
+    "rental_car": [
+        "rental car",
+        "rental cars",
+        "car rental",
+        "car rentals",
+        "rental car reimbursement"
+    ]
+}
+
+
+def detect_unsupported_topic(query):
+    """
+    Detect specific travel/expense types that are not defined
+    in the supplied policy documents.
+    """
+
+    query_lower = query.lower()
+
+    for topic, keywords in UNSUPPORTED_TRAVEL_TYPES.items():
+
+        for keyword in keywords:
+
+            if keyword in query_lower:
+
+                return topic
+
+    return None
+
+# --------------------------------------------------
+# Semantic search
+# --------------------------------------------------
 
 def search_policy(
     query,
     top_k=3
 ):
     """
-    Search the policy knowledge base
-    using semantic similarity.
+    Search the policy knowledge base using semantic similarity.
+
+    Returns no results when the query explicitly asks about a
+    travel/expense type that is not defined in the supplied
+    policy documents.
     """
 
+    # --------------------------------------------------
+    # Check for unsupported travel types first
+    # --------------------------------------------------
+
+    unsupported_topic = detect_unsupported_topic(query)
+
+    if unsupported_topic:
+
+        print(
+            f"[RAG] Unsupported policy topic detected: "
+            f"{unsupported_topic}"
+        )
+
+        return []
+
+
+    # --------------------------------------------------
     # Load existing FAISS index
+    # --------------------------------------------------
+
     index, chunks = load_vector_store()
 
-    # Convert user query into embedding
+
+    # --------------------------------------------------
+    # Convert query into embedding
+    # --------------------------------------------------
+
     query_embedding = model.encode(
         [query],
         convert_to_numpy=True,
         normalize_embeddings=True
     ).astype("float32")
 
-    # Search FAISS
+
+    # --------------------------------------------------
+    # FAISS search
+    # --------------------------------------------------
+
     scores, indices = index.search(
         query_embedding,
         top_k
     )
 
+
     results = []
+
 
     for score, index_id in zip(
         scores[0],
@@ -278,16 +362,15 @@ def search_policy(
         if index_id == -1:
             continue
 
+
         results.append({
             "text": chunks[index_id]["text"],
-
             "metadata": chunks[index_id]["metadata"],
-
             "score": float(score)
         })
 
-    return results
 
+    return results
 
 # --------------------------------------------------
 # Main

@@ -29,14 +29,16 @@ async function askAssistant() {
             body: JSON.stringify({
                 employee_id: employeeId,
                 question: question,
-                session_id: employeeId || "default"
+                session_id: "default"
             })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || "Unable to process the request.");
+            throw new Error(
+                data.error || "Unable to process the request."
+            );
         }
 
         answerElement.textContent = data.answer;
@@ -46,7 +48,7 @@ async function askAssistant() {
                 "Policy Source: " + data.sources.join(", ");
         }
 
-        loadHistory();
+        await loadHistory();
 
         document.getElementById("question").value = "";
 
@@ -60,17 +62,18 @@ async function askAssistant() {
 
 
 async function loadHistory() {
-    const employeeId = document.getElementById("employeeId").value.trim();
-    const sessionId = employeeId || "default";
+    const employeeId =
+        document.getElementById("employeeId").value.trim();
 
     try {
         const response = await fetch(
-            `/history?session_id=${encodeURIComponent(sessionId)}`
+            `/history?session_id=default&employee_id=${encodeURIComponent(employeeId)}`
         );
 
         const data = await response.json();
 
-        const historyElement = document.getElementById("history");
+        const historyElement =
+            document.getElementById("history");
 
         if (!data.history || data.history.length === 0) {
             historyElement.textContent = "No conversation yet.";
@@ -80,12 +83,16 @@ async function loadHistory() {
         historyElement.innerHTML = "";
 
         data.history.forEach(message => {
+
             const item = document.createElement("div");
             item.className = "history-item";
 
             const role = document.createElement("strong");
+
             role.textContent =
-                message.role === "user" ? "User" : "Assistant";
+                message.role === "user"
+                    ? "User"
+                    : "Assistant";
 
             const content = document.createElement("div");
             content.textContent = message.content;
@@ -103,8 +110,8 @@ async function loadHistory() {
 
 
 async function clearConversation() {
-    const employeeId = document.getElementById("employeeId").value.trim();
-    const sessionId = employeeId || "default";
+    const employeeId =
+        document.getElementById("employeeId").value.trim();
 
     try {
         const response = await fetch("/clear", {
@@ -113,20 +120,24 @@ async function clearConversation() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                session_id: sessionId
+                session_id: "default",
+                employee_id: employeeId
             })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || "Unable to clear conversation.");
+            throw new Error(
+                data.error || "Unable to clear conversation."
+            );
         }
 
         document.getElementById("answer").textContent =
             "Conversation cleared.";
 
         document.getElementById("source").textContent = "";
+
         document.getElementById("history").textContent =
             "No conversation yet.";
 

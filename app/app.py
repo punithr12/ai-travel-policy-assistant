@@ -1,5 +1,4 @@
 import sys
-import re
 from pathlib import Path
 
 # Add project root to Python path
@@ -15,14 +14,24 @@ from src.memory import get_history, clear_history
 app = Flask(__name__)
 
 
+# ---------------------------------------------------------
+# Home
+# ---------------------------------------------------------
+
 @app.route("/", methods=["GET"])
 def home():
     return render_template("index.html")
 
 
+# ---------------------------------------------------------
+# Ask Assistant
+# ---------------------------------------------------------
+
 @app.route("/ask", methods=["POST"])
 def ask():
+
     try:
+
         data = request.get_json()
 
         if not data:
@@ -32,21 +41,30 @@ def ask():
 
         question = data.get("question", "").strip()
         employee_id = data.get("employee_id", "").strip()
-        session_id = data.get("session_id", "default").strip()
+        requested_session_id = data.get("session_id", "default").strip()
+
+        if employee_id:
+            session_id = f"{requested_session_id}_{employee_id.upper()}"
+        else:
+            session_id = requested_session_id
 
         if not question:
             return jsonify({
                 "error": "Please enter a question."
             }), 400
 
-        # Run the AI agent
-
+        # Pass Employee ID separately to the agent.
+        # The agent will use it as explicit employee context.
         answer = run_agent(
             question=question,
-            session_id=session_id
+            session_id=session_id,
+            employee_id=employee_id
         )
 
-        # Extract policy filenames mentioned by the agent
+        # -------------------------------------------------
+        # Extract policy filenames mentioned in answer
+        # -------------------------------------------------
+
         policy_files = [
             "travel_policy_india.txt",
             "travel_policy_us.txt",
@@ -72,6 +90,7 @@ def ask():
         })
 
     except Exception as error:
+
         print(f"Error in /ask: {error}")
 
         return jsonify({
@@ -79,13 +98,27 @@ def ask():
         }), 500
 
 
+# ---------------------------------------------------------
+# Conversation History
+# ---------------------------------------------------------
+
 @app.route("/history", methods=["GET"])
 def history():
     try:
-        session_id = request.args.get(
+        requested_session_id = request.args.get(
             "session_id",
             "default"
         ).strip()
+
+        employee_id = request.args.get(
+            "employee_id",
+            ""
+        ).strip()
+
+        if employee_id:
+            session_id = f"{requested_session_id}_{employee_id.upper()}"
+        else:
+            session_id = requested_session_id
 
         history_data = get_history(session_id)
 
@@ -102,15 +135,29 @@ def history():
         }), 500
 
 
+# ---------------------------------------------------------
+# Clear Conversation
+# ---------------------------------------------------------
+
 @app.route("/clear", methods=["POST"])
 def clear():
     try:
         data = request.get_json() or {}
 
-        session_id = data.get(
+        requested_session_id = data.get(
             "session_id",
             "default"
         ).strip()
+
+        employee_id = data.get(
+            "employee_id",
+            ""
+        ).strip()
+
+        if employee_id:
+            session_id = f"{requested_session_id}_{employee_id.upper()}"
+        else:
+            session_id = requested_session_id
 
         clear_history(session_id)
 
@@ -127,15 +174,25 @@ def clear():
         }), 500
 
 
+# ---------------------------------------------------------
+# Health Check
+# ---------------------------------------------------------
+
 @app.route("/health", methods=["GET"])
 def health():
+
     return jsonify({
         "status": "healthy",
         "service": "AI Travel Policy Assistant"
     })
 
 
+# ---------------------------------------------------------
+# Run Flask
+# ---------------------------------------------------------
+
 if __name__ == "__main__":
+
     app.run(
         host="127.0.0.1",
         port=5000,
