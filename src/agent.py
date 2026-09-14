@@ -5,6 +5,7 @@ from .embeddings import search_policy
 from .tools.employee_tools import check_employee_eligibility
 from .tools.trip_tools import validate_trip
 from .tools.reimbursement_tools import calculate_reimbursement
+from .memory import get_history, add_message
 
 
 MODEL_NAME = "qwen3:1.7b"
@@ -171,7 +172,36 @@ def execute_tool(tool_name, arguments):
 # Agent
 # ---------------------------------------------------------
 
-def run_agent(question):
+def run_agent(question, session_id="default"):
+    history = get_history(session_id)
+
+    contextual_question = question
+
+    if history:
+        previous_text = " ".join(
+            message["content"]
+            for message in history
+        )
+
+        lower_question = question.lower()
+
+        cost_follow_up = (
+            "what if" in lower_question
+            and ("cost" in lower_question or "price" in lower_question)
+        )
+
+        if cost_follow_up:
+            contextual_question = (
+                f"Previous conversation:\n{previous_text}\n\n"
+                f"Current question:\n{question}\n\n"
+                "Determine the applicable company travel policy limit "
+                "for the trip discussed in the previous conversation."
+            )
+    """
+    Run the travel policy agent with conversation memory.
+    """
+
+
 
     messages = [
         {
@@ -195,6 +225,22 @@ Rules:
 4. Use calculate_reimbursement when reimbursement amounts need
    to be calculated.
 
+4a. Use validate_trip only when the user provides enough specific
+    trip details such as a trip type together with an amount and time,
+    or explicitly asks to validate a specific trip.
+
+4b. For general policy questions such as "Can I take an airport trip?",
+    use search_policy instead of validate_trip.
+
+4c. If a follow-up question adds only a cost to a previously discussed
+    trip, first use the previous conversation to understand the trip
+    and use search_policy to determine the applicable policy limit.
+    Do not require unrelated details that were never provided.
+
+4d. Do not ask for trip date, trip time, or approval status when the
+    user is asking only about whether a type of trip is covered by
+    company policy.
+
 5. You may use multiple tools when necessary.
 
 6. Never invent employee records, policy limits, approval status,
@@ -205,11 +251,6 @@ Rules:
 8. If the available information is insufficient, clearly say so.
 
 9. Never change the status returned by a business tool.
-   For example:
-   - "Approved" means approved.
-   - "Needs Approval" means approval is required, not rejected.
-   - "Rejected" means rejected.
-   - "Needs Review" means further review is required.
 
 10. Do not interpret "Needs Approval" as "Not Allowed".
 
@@ -221,14 +262,60 @@ Rules:
     The supplied policy allows late-night business travel,
     while normal spending and approval limits still apply.
 
-13. Give a concise and direct final answer.
+13. Always use the previous conversation history to resolve follow-up
+    questions before asking the user to repeat information.
+
+14. When a follow-up uses words such as "it", "this trip", "that trip",
+    "the amount", "what if", or similar references, identify what the
+    reference means from the previous conversation.
+
+15. Preserve the employee ID, trip type, country, amount, and other
+    relevant details from the previous conversation when they are
+    available.
+
+16. If the user asks a follow-up about the cost of a previously
+    discussed trip, do not ask for the employee ID again if it is
+    already known.
+
+17. If a follow-up asks what happens when a previously discussed trip
+    costs a particular amount, retrieve the applicable policy limit
+    and explain whether the amount is within the limit or requires
+    approval.
+
+18. Never invent missing trip details. Only reuse details that are
+    actually present in the conversation or provided by the user.
+
+19. When a user asks about an amount exceeding a policy limit,
+    clearly distinguish:
+    - Trip amount
+    - Policy limit
+    - Amount requiring approval or review
+
+20. If the required information is not available, do not guess.
+    Say that additional information is required.
+
+21. Never state that an amount is fully reimbursable unless the
+    applicable policy limit has been established from the available
+    policy data or a tool result..
 """
-        },
-        {
-            "role": "user",
-            "content": question
         }
     ]
+
+    # Add previous conversation to the messages
+    for message in history:
+        messages.append(message)
+
+    # Add current user question
+    messages.append(
+        {
+            "role": "user",
+            "content": contextual_question
+        }
+    )
+
+    # -----------------------------------------------------
+    # First LLM call
+    # -----------------------------------------------------
 
     response = ollama.chat(
         model=MODEL_NAME,
@@ -238,7 +325,7 @@ Rules:
 
     message = response["message"]
 
-    # Keep the assistant's tool-call message in the conversation
+    # Keep the assistant's response/tool-call message
     messages.append(message)
 
     # -----------------------------------------------------
@@ -248,7 +335,22 @@ Rules:
     tool_calls = message.get("tool_calls", [])
 
     if not tool_calls:
-        return message.get("content", "")
+
+        answer = message.get("content", "")
+
+        add_message(
+            session_id,
+            "user",
+            question
+        )
+
+        add_message(
+            session_id,
+            "assistant",
+            answer
+        )
+
+        return answer
 
     for tool_call in tool_calls:
 
@@ -257,8 +359,6 @@ Rules:
         tool_name = function["name"]
         arguments = function["arguments"]
 
-        # Some Ollama versions return arguments as JSON text,
-        # while others may return a dictionary.
         if isinstance(arguments, str):
             arguments = json.loads(arguments)
 
@@ -280,7 +380,7 @@ Rules:
         )
 
     # -----------------------------------------------------
-    # Ask the LLM to produce the final answer
+    # Final LLM response
     # -----------------------------------------------------
 
     final_response = ollama.chat(
@@ -289,7 +389,25 @@ Rules:
         tools=TOOLS
     )
 
-    return final_response["message"]["content"]
+    answer = final_response["message"]["content"]
+
+    # -----------------------------------------------------
+    # Store conversation in memory
+    # -----------------------------------------------------
+
+    add_message(
+        session_id,
+        "user",
+        question
+    )
+
+    add_message(
+        session_id,
+        "assistant",
+        answer
+    )
+
+    return answer
 
 
 # ---------------------------------------------------------

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Travel & Policy Assistant</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+</head>
+
+<body>
+
+    <div class="container">
+
+        <header>
+            <h1>AI Travel & Policy Assistant</h1>
+            <p>Company Travel Policy & Employee Operations Assistant</p>
+        </header>
+
+        <section class="input-section">
+
+            <label for="employeeId">Employee ID</label>
+            <input
+                type="text"
+                id="employeeId"
+                placeholder="Example: EMP001"
+            >
+
+            <label for="question">Ask your question</label>
+            <textarea
+                id="question"
+                placeholder="Example: Can I take an airport trip costing INR 2,500?"
+            ></textarea>
+
+            <div class="button-row">
+                <button id="askButton" onclick="askAssistant()">
+                    Ask Assistant
+                </button>
+
+                <button id="clearButton" onclick="clearConversation()">
+                    Clear Conversation
+                </button>
+            </div>
+
+            <p id="errorMessage" class="error"></p>
+
+        </section>
+
+        <section class="response-section">
+
+            <h2>Assistant Response</h2>
+
+            <div id="loading" class="loading">
+                Thinking...
+            </div>
+
+            <div id="answer" class="answer">
+                Your answer will appear here.
+            </div>
+
+            <div id="source" class="source">
+            </div>
+
+        </section>
+
+        <section class="history-section">
+
+            <h2>Conversation History</h2>
+
+            <div id="history">
+                No conversation yet.
+            </div>
+
+        </section>
+
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+</body>
+</html>
